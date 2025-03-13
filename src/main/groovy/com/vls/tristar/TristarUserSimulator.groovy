@@ -10,15 +10,23 @@ import com.vls.tristar.model.Round
 import com.vls.tristar.model.Winning
 import com.vls.tristar.service.JWTService
 import groovy.util.logging.Slf4j
+import jakarta.websocket.ContainerProvider
+import jakarta.websocket.WebSocketContainer
+import org.apache.commons.logging.LogAdapter
+import org.apache.commons.logging.LogFactory
 import org.springframework.lang.Nullable
 import org.springframework.messaging.converter.MappingJackson2MessageConverter
+import org.springframework.messaging.simp.stomp.StompCommand
 import org.springframework.messaging.simp.stomp.StompFrameHandler
 import org.springframework.messaging.simp.stomp.StompHeaders
 import org.springframework.messaging.simp.stomp.StompSession
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter
 import org.springframework.web.socket.WebSocketHttpHeaders
+import org.springframework.web.socket.WebSocketMessage
+import org.springframework.web.socket.WebSocketSession
 import org.springframework.web.socket.client.WebSocketClient
 import org.springframework.web.socket.client.standard.StandardWebSocketClient
+import org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator
 import org.springframework.web.socket.messaging.WebSocketStompClient
 
 import java.lang.reflect.Type
@@ -33,6 +41,7 @@ import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalUnit
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.logging.Logger
 
 @Slf4j
 class TristarUserSimulator implements Runnable {
@@ -93,12 +102,16 @@ class TristarUserSimulator implements Runnable {
             String jwtToken = login(oneTimeToken)
             log.info("Got JWT token {}", jwtToken)
 
+            WebSocketContainer container = ContainerProvider.getWebSocketContainer()
+            container.setDefaultMaxSessionIdleTimeout(-1)
+            container.setDefaultMaxBinaryMessageBufferSize(10 * 1024 * 1024)
             client = new StandardWebSocketClient();
 
             stompClient = new WebSocketStompClient(client);
 
             MappingJackson2MessageConverter converter = new MappingJackson2MessageConverter()
             converter.objectMapper.registerModule(new JavaTimeModule());
+            stompClient.setInboundMessageSizeLimit(10 * 1024*1024)
             stompClient.setMessageConverter(converter);
 
             WebSocketHttpHeaders headers = new WebSocketHttpHeaders()
@@ -106,8 +119,8 @@ class TristarUserSimulator implements Runnable {
             StompHeaders stompHeaders = new StompHeaders()
             stompHeaders.add("x-authorization", jwtToken)
 
-            session = stompClient.connectAsync(Constants.gamingEndpoint, headers, stompHeaders, new StompSessionHandlerAdapter() {
-            }).get(1, TimeUnit.SECONDS);
+            session = stompClient.connectAsync(Constants.gamingEndpoint, headers, stompHeaders, new CustomStompSessionHandlerAdapter()).get(1, TimeUnit.SECONDS);
+
             log.info("Connected to WebSocket")
 
             return true;
@@ -212,7 +225,7 @@ class TristarUserSimulator implements Runnable {
                     log.info("Bet {} on {} is placed by user {} for round {}, counter {} ", placedBet.clientBetId, placedBet.amount, name, currentRound?.externalRoundId, counter)
                 }
 
-                nextCheckTime = Instant.now().plusSeconds(3)
+                nextCheckTime = Instant.now().plusSeconds(5)
             }
             Thread.yield()
             if (shouldStop) {
@@ -275,6 +288,12 @@ class TristarUserSimulator implements Runnable {
     }
 
     class MarketHandler implements StompFrameHandler {
+
+        static ObjectMapper objectMapper = new ObjectMapper()
+
+        static {
+            objectMapper.registerModule(new JavaTimeModule());
+        }
 
         @Override
         Type getPayloadType(StompHeaders headers) {
@@ -381,5 +400,43 @@ class TristarUserSimulator implements Runnable {
 
             balanceBefore = balanceAfter
         }
+    }
+}
+
+@Slf4j
+class CustomStompSessionHandlerAdapter extends StompSessionHandlerAdapter {
+
+
+
+
+    @Override
+    void handleFrame(StompHeaders headers, @Nullable Object payload) {
+        super.handleFrame(headers, payload)
+        log.info("Received STOMP frame: {}", payload)
+    }
+
+    @Override
+    void handleException(StompSession session, @Nullable StompCommand command, StompHeaders headers, byte[] payload, Throwable exception) {
+        super.handleException(session, command, headers, payload, exception)
+        log.error("Stomp exception: {}", exception.getMessage())
+    }
+
+    @Override
+    void handleTransportError(StompSession session, Throwable exception) {
+        super.handleTransportError(session, exception)
+        log.error("Stomp error: {}, {}", exception.getMessage(), exception.getClass().getName())
+    }
+}
+
+class CustomWebSocketStompClient extends WebSocketStompClient {
+
+    /**
+     * Class constructor. Sets {@link #setDefaultHeartbeat} to "0,0" but will
+     * reset it back to the preferred "10000,10000" when a
+     * {@link #setTaskScheduler} is configured.
+     * @param webSocketClient the WebSocket client to connect with
+     */
+    CustomWebSocketStompClient(WebSocketClient webSocketClient) {
+        super(webSocketClient)
     }
 }
