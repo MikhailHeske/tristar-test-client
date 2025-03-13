@@ -12,6 +12,10 @@ repositories {
     mavenCentral()
 }
 
+springBoot {
+    mainClass = 'com.vls.tristar.Main'
+}
+
 dependencies {
     implementation 'org.apache.groovy:groovy:4.0.14'
     implementation 'com.neovisionaries:nv-websocket-client:2.14'
