@@ -2,10 +2,10 @@ package com.vls.tristar
 
 class Constants {
 
-    static final String simulatorHost = 'https://tristar-third-party-simulator.qa.tristaar.com'
-    static final String playerHost = 'ws://tristar-player-api-service.qa.tristaar.staging/api/player'
-    static final String authHost = 'https://auth-service.qa.tristaar.com/api/auth'
-    static final String operatorHost = 'https://tristar-operator-service.qa.tristaar.com'
+    static final String simulatorHost = 'http://tristar-third-party-simulator:8080'
+    static final String playerHost = 'ws://tristar-client.qa.tristaar.com/api/player'
+    static final String authHost = 'https://tristar-client.qa.tristaar.com/api/auth'
+    static final String operatorHost = 'http://tristar-operator-service:3000'
 
     static final String createUserSimulatorEndpoint = simulatorHost + '/api/v1/users'
     static final String operatorGameUrlEndpoint = operatorHost + '/game/url'
