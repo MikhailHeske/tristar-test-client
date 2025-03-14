@@ -6,11 +6,11 @@ import java.time.Instant
 static void main(String[] args) {
     println "Starting test!"
 
-    int usersNumber = Integer.parseInt(System.getenv("USERS_NUMBER") ?: "1")
-    int statUsersNumber = 1
+    int usersNumber = Integer.parseInt(System.getenv("USERS_NUMBER") ?: "704")
+    int statUsersNumber = 50
     int addUsersDelay = 30
-    int addUsersNumber = 0
-    int testTotalTime = 100
+    int addUsersNumber = 50
+    int testTotalTime = 30
 
     List<Thread> threads = []
 
