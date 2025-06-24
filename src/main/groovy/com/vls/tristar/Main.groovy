@@ -6,9 +6,9 @@ import java.time.Instant
 static void main(String[] args) {
     println "Starting test!"
 
-    int usersNumber = Integer.parseInt(System.getenv("USERS_NUMBER") ?: "704")
+    int usersNumber = Integer.parseInt(System.getenv("USERS_NUMBER") ?: "799")
     int statUsersNumber = 50
-    int addUsersDelay = 30
+    int addUsersDelay = 10
     int addUsersNumber = 50
     int testTotalTime = 30
 

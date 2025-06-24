@@ -12,6 +12,7 @@ import com.vls.tristar.service.JWTService
 import groovy.util.logging.Slf4j
 import jakarta.websocket.ContainerProvider
 import jakarta.websocket.WebSocketContainer
+import lombok.extern.slf4j.Slf4j
 import org.apache.commons.logging.LogAdapter
 import org.apache.commons.logging.LogFactory
 import org.springframework.lang.Nullable
@@ -51,7 +52,7 @@ class TristarUserSimulator implements Runnable {
 
     private String name
     private String userId
-    private String gameId = "1"
+    private String gameId = List.of("1", "3", "103", "104", "105")[new Random().nextInt(5)]
     private HttpClient httpClient = HttpClient.newHttpClient();
 
     private WebSocketClient client
@@ -93,14 +94,14 @@ class TristarUserSimulator implements Runnable {
 
     boolean connect() {
         try {
-            log.info("Connection for user {}", name)
+            println("Connection for user $name")
 
             String gameUrlLink = getGameUrlLink()
-            log.info("Got game url link {}", gameUrlLink)
+            println("Got game url link $gameUrlLink")
             String oneTimeToken = extractOneTimeLoginToken(gameUrlLink)
-            log.info("Extracted one time token {}", oneTimeToken)
+            println("Extracted one time token $oneTimeToken")
             String jwtToken = login(oneTimeToken)
-            log.info("Got JWT token {}", jwtToken)
+            println("Got JWT token $jwtToken")
 
             WebSocketContainer container = ContainerProvider.getWebSocketContainer()
             container.setDefaultMaxSessionIdleTimeout(-1)
@@ -119,14 +120,15 @@ class TristarUserSimulator implements Runnable {
             StompHeaders stompHeaders = new StompHeaders()
             stompHeaders.add("x-authorization", jwtToken)
 
-            session = stompClient.connectAsync(Constants.gamingEndpoint, headers, stompHeaders, new CustomStompSessionHandlerAdapter()).get(1, TimeUnit.SECONDS);
+            session = stompClient.connectAsync(Constants.gamingEndpoint, headers, stompHeaders, new CustomStompSessionHandlerAdapter()).get(3, TimeUnit.SECONDS);
 
-            log.info("Connected to WebSocket")
+            println("Connected to WebSocket")
 
             return true;
 
         } catch (Exception e) {
-            log.error("Failed to connect to TriStar User Simulator: {}", e.getMessage());
+            e.printStackTrace()
+            println("Failed to connect to TriStar User Simulator: ${e.getMessage()}");
             return false;
         }
     }
@@ -138,7 +140,7 @@ class TristarUserSimulator implements Runnable {
                 token         : UUID.randomUUID().toString(),
                 sub_partner_id: "casino",
                 platform      : "GPL_MOBILE",
-                operator_id   : "HUB_TRISTAR",
+                operator_id   : "1",
                 lobby_url     : "https://amazing-casino.com/lobby",
                 lang          : "en",
                 ip            : "142.245.172.168",
@@ -160,7 +162,7 @@ class TristarUserSimulator implements Runnable {
                 .build()
 
         HttpResponse<String> gameUrlResponse = httpClient.send(gameUrlRequest, HttpResponse.BodyHandlers.ofString())
-        log.info("Got response from game/url {}", gameUrlResponse.body())
+        println("Got response from game/url ${gameUrlResponse.body()}" )
         return mapper.readValue(gameUrlResponse.body(), Map).url
     }
 
@@ -204,6 +206,7 @@ class TristarUserSimulator implements Runnable {
 
     @Override
     void run() {
+        println "Subscribe user $userId to game $gameId"
         session.subscribe("/topic/game/" + gameId + "/round", new RoundHandler())
         session.subscribe("/topic/game/" + gameId + "/market", new MarketHandler())
         session.subscribe("/user/" + userId + "/bets", new BetStateHandler())
@@ -212,7 +215,7 @@ class TristarUserSimulator implements Runnable {
         Instant nextCheckTime = Instant.now().plusSeconds(1)
         while (true) {
             if (!session.isConnected()) {
-                log.error("Connection is closed!!!")
+                println("Connection is closed!!!")
                 Reports.getInstance().incrementConnectionLost()
                 return
             }
@@ -220,16 +223,16 @@ class TristarUserSimulator implements Runnable {
                 def openMarkets = markets.findAll { it.status == "OPEN" }
                 if (openMarkets) {
                     def marketForPlaceBet = markets[random.nextInt(openMarkets.size())]
-                    log.info("Market are open. User {} wants to place bet on market {} with id {}!", name, marketForPlaceBet.name, marketForPlaceBet.id)
+                    println("Market are open. User $name wants to place bet on market ${marketForPlaceBet.name} with id ${marketForPlaceBet.id}!")
                     PlaceBet placedBet = placeBet(marketForPlaceBet)
-                    log.info("Bet {} on {} is placed by user {} for round {}, counter {} ", placedBet.clientBetId, placedBet.amount, name, currentRound?.externalRoundId, counter)
+                    println("Bet ${placedBet.clientBetId} on ${placedBet.amount} is placed by user $name for round ${currentRound?.externalRoundId}, counter ${counter} ")
                 }
 
-                nextCheckTime = Instant.now().plusSeconds(5)
+                nextCheckTime = Instant.now().plusSeconds(3)
             }
             Thread.yield()
             if (shouldStop) {
-                log.info("Stopping TristarUserSimulator for user {}", name)
+                println("Stopping TristarUserSimulator for user $name")
                 return
             }
         }
@@ -241,7 +244,7 @@ class TristarUserSimulator implements Runnable {
         markets = []
 
         counter++
-        log.debug("Ready to next {}th round", counter)
+        println("Ready to next ${counter}th round")
     }
 
     BigDecimal fetchBalance() {
@@ -276,7 +279,7 @@ class TristarUserSimulator implements Runnable {
 
         @Override
         void handleFrame(StompHeaders headers, @Nullable Object payload) {
-            log.info("Received round update: {}", payload)
+            println("Received round update: $payload")
 
             Round newRound = (Round) payload
 
@@ -302,7 +305,7 @@ class TristarUserSimulator implements Runnable {
 
         @Override
         void handleFrame(StompHeaders headers, @Nullable Object payload) {
-            log.info("Received market update: {}", payload)
+            // println("Received market update: $payload")
             Market newMarket = (Market) payload
 
             int indexOfMarket = markets.findIndexOf { it.id == newMarket.id }
@@ -346,12 +349,12 @@ class TristarUserSimulator implements Runnable {
 
         @Override
         void handleFrame(StompHeaders headers, @Nullable Object payload) {
-            log.debug("Come bets update")
+            // println("Come bets update")
             try {
                 BetsStatetsDTO betsStatetsDTO = (BetsStatetsDTO) payload
 
                 for (Bet newBet : betsStatetsDTO.bets) {
-                    log.info("Received bet state update: {}", newBet)
+                    println("Received bet state update: $newBet")
                     boolean isReplaced = false
                     for (int i = 0; i < currentBets.size() && !isReplaced; i++) {
                         if (currentBets[i].id == newBet.id) {
@@ -364,7 +367,7 @@ class TristarUserSimulator implements Runnable {
                     }
                 }
             } catch (Exception e) {
-                log.error("Error in BetStateHandler: {}", e.getMessage())
+                println("Error in BetStateHandler: ${e.getMessage()}")
             }
         }
     }
@@ -378,7 +381,7 @@ class TristarUserSimulator implements Runnable {
 
         @Override
         void handleFrame(StompHeaders headers, @Nullable Object payload) {
-            log.debug("Received winning update: {}", payload)
+            println("Received winning update: $payload")
 
             Winning winning = (Winning) payload
 
@@ -394,8 +397,8 @@ class TristarUserSimulator implements Runnable {
             )
 
             UserRoundResultValidator validator = new UserRoundResultValidator(data)
-            log.info("RoundResultData: {}", data)
-            log.info("Is round result right: {}", validator.isCalulationRight())
+            println("RoundResultData: $data")
+            println("Is round result right: ${validator.isCalulationRight()}")
             Reports.getInstance().addReportData(data)
 
             balanceBefore = balanceAfter
@@ -412,19 +415,19 @@ class CustomStompSessionHandlerAdapter extends StompSessionHandlerAdapter {
     @Override
     void handleFrame(StompHeaders headers, @Nullable Object payload) {
         super.handleFrame(headers, payload)
-        log.info("Received STOMP frame: {}", payload)
+        println("Received STOMP frame: $payload")
     }
 
     @Override
     void handleException(StompSession session, @Nullable StompCommand command, StompHeaders headers, byte[] payload, Throwable exception) {
         super.handleException(session, command, headers, payload, exception)
-        log.error("Stomp exception: {}", exception.getMessage())
+        println("Stomp exception: ${exception.getMessage()}")
     }
 
     @Override
     void handleTransportError(StompSession session, Throwable exception) {
         super.handleTransportError(session, exception)
-        log.error("Stomp error: {}, {}", exception.getMessage(), exception.getClass().getName())
+        println("Stomp error: ${exception.getMessage()}, ${exception.getClass().getName()}")
     }
 }
 
