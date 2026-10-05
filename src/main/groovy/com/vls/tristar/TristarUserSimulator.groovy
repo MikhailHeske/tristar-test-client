@@ -15,6 +15,8 @@ import jakarta.websocket.WebSocketContainer
 import lombok.extern.slf4j.Slf4j
 import org.apache.commons.logging.LogAdapter
 import org.apache.commons.logging.LogFactory
+import org.bouncycastle.jcajce.provider.asymmetric.RSA
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.springframework.lang.Nullable
 import org.springframework.messaging.converter.MappingJackson2MessageConverter
 import org.springframework.messaging.simp.stomp.StompCommand
@@ -36,6 +38,16 @@ import java.math.RoundingMode
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.security.KeyFactory
+import java.security.NoSuchAlgorithmException
+import java.security.PrivateKey
+import java.security.PublicKey
+import java.security.Security
+import java.security.Signature
+import java.security.spec.PKCS8EncodedKeySpec
 import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -52,7 +64,7 @@ class TristarUserSimulator implements Runnable {
 
     private String name
     private String userId
-    private String gameId = List.of("1", "3", "103", "104", "105")[new Random().nextInt(5)]
+    private String gameId = List.of("106", "3", "103", "104", "105", "107", "108")[new Random().nextInt(5)]
     private HttpClient httpClient = HttpClient.newHttpClient();
 
     private WebSocketClient client
@@ -67,7 +79,7 @@ class TristarUserSimulator implements Runnable {
 
     boolean init() {
         createUserInSimulator()
-        balanceBefore = fetchBalance()
+        balanceBefore = fetchBalanceDi()
         return connect()
     }
 
@@ -96,7 +108,7 @@ class TristarUserSimulator implements Runnable {
         try {
             println("Connection for user $name")
 
-            String gameUrlLink = getGameUrlLink()
+            String gameUrlLink = getGameUrlLinkDI()
             println("Got game url link $gameUrlLink")
             String oneTimeToken = extractOneTimeLoginToken(gameUrlLink)
             println("Extracted one time token $oneTimeToken")
@@ -112,7 +124,7 @@ class TristarUserSimulator implements Runnable {
 
             MappingJackson2MessageConverter converter = new MappingJackson2MessageConverter()
             converter.objectMapper.registerModule(new JavaTimeModule());
-            stompClient.setInboundMessageSizeLimit(10 * 1024*1024)
+            stompClient.setInboundMessageSizeLimit(10 * 1024 * 1024)
             stompClient.setMessageConverter(converter);
 
             WebSocketHttpHeaders headers = new WebSocketHttpHeaders()
@@ -121,6 +133,8 @@ class TristarUserSimulator implements Runnable {
             stompHeaders.add("x-authorization", jwtToken)
 
             session = stompClient.connectAsync(Constants.gamingEndpoint, headers, stompHeaders, new CustomStompSessionHandlerAdapter()).get(3, TimeUnit.SECONDS);
+
+
 
             println("Connected to WebSocket")
 
@@ -140,7 +154,7 @@ class TristarUserSimulator implements Runnable {
                 token         : UUID.randomUUID().toString(),
                 sub_partner_id: "casino",
                 platform      : "GPL_MOBILE",
-                operator_id   : "1",
+                operator_id   : "HUB_TRISTAR",
                 lobby_url     : "https://amazing-casino.com/lobby",
                 lang          : "en",
                 ip            : "142.245.172.168",
@@ -162,9 +176,39 @@ class TristarUserSimulator implements Runnable {
                 .build()
 
         HttpResponse<String> gameUrlResponse = httpClient.send(gameUrlRequest, HttpResponse.BodyHandlers.ofString())
-        println("Got response from game/url ${gameUrlResponse.body()}" )
+        println("Got response from game/url ${gameUrlResponse.body()}")
         return mapper.readValue(gameUrlResponse.body(), Map).url
     }
+
+    private String getGameUrlLinkDI() {
+        Map<String, Object> gameUrlBody = [
+                sessionId : UUID.randomUUID().toString(),
+                user      : name,
+                operatorId: "DIRECT_OPERATOR",
+                gameCode  : "TP2020",
+                currency  : "USD"
+        ]
+
+        String body = mapper.writeValueAsString(gameUrlBody)
+
+        HttpRequest gameUrlRequest = HttpRequest.newBuilder()
+                .uri(URI.create(Constants.operatorGameUrlDIEndpoint))
+                .header("x-signature", generateSignature(body))
+                .header('x-operator-id', gameUrlBody.operatorId.toString())
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .timeout(Duration.of(5, ChronoUnit.SECONDS))
+                .build()
+
+        HttpResponse<String> gameUrlResponse = httpClient.send(gameUrlRequest, HttpResponse.BodyHandlers.ofString())
+        println("Got response from game/url ${gameUrlResponse.body()}")
+        return mapper.readValue(gameUrlResponse.body(), Map).url
+    }
+
+    public static String generateSignature(String string_to_sign) throws Exception {
+        return "alohomora"
+    }
+
 
     private String login(String oneTimeToken) {
         Map<String, Object> loginBody = [
@@ -228,7 +272,7 @@ class TristarUserSimulator implements Runnable {
                     println("Bet ${placedBet.clientBetId} on ${placedBet.amount} is placed by user $name for round ${currentRound?.externalRoundId}, counter ${counter} ")
                 }
 
-                nextCheckTime = Instant.now().plusSeconds(3)
+                nextCheckTime = Instant.now().plusSeconds(5)
             }
             Thread.yield()
             if (shouldStop) {
@@ -249,11 +293,11 @@ class TristarUserSimulator implements Runnable {
 
     BigDecimal fetchBalance() {
         Map<String, Object> balanceBody = [
-                token: "ssss",
+                token        : "ssss",
                 supplier_user: name,
-                request_uuid: "wwww",
-                game_code: "DTL",
-                gameId: "1"
+                request_uuid : "wwww",
+                game_code    : "DTL",
+                gameId       : "1"
         ]
 
         HttpRequest balanceRequest = HttpRequest.newBuilder()
@@ -267,6 +311,25 @@ class TristarUserSimulator implements Runnable {
         HttpResponse<String> response = httpClient.send(balanceRequest, HttpResponse.BodyHandlers.ofString())
         BigDecimal balance = mapper.readValue(response.body(), Map).balance as BigDecimal
         return balance.divide(100000 as BigDecimal).setScale(2, RoundingMode.UP)
+
+    }
+
+    BigDecimal fetchBalanceDi() {
+        Map<String, Object> balanceBody = [
+                user: name,
+        ]
+
+        HttpRequest balanceRequest = HttpRequest.newBuilder()
+                .uri(URI.create(Constants.balanceDIEndpoint.replace("{user}", name)))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        mapper.writeValueAsString(balanceBody)
+                ))
+                .build()
+
+        HttpResponse<String> response = httpClient.send(balanceRequest, HttpResponse.BodyHandlers.ofString())
+        BigDecimal balance = mapper.readValue(response.body(), Map).balance as BigDecimal
+        return balance
 
     }
 
@@ -324,7 +387,7 @@ class TristarUserSimulator implements Runnable {
 
         PlaceBet placeBet = new PlaceBet(
                 clientBetId: UUID.randomUUID().toString(),
-                amount: random.nextInt(90) + 10,
+                amount: random.nextInt(100) + 10,
                 selectionId: selection.id,
                 priceId: selection.backPrices[0].id,
                 marketId: market.id,
@@ -385,7 +448,7 @@ class TristarUserSimulator implements Runnable {
 
             Winning winning = (Winning) payload
 
-            BigDecimal balanceAfter = fetchBalance()
+            BigDecimal balanceAfter = fetchBalanceDi()
             UserRoundResultData data = new UserRoundResultData(
                     userId: userId,
                     userName: name,
@@ -408,8 +471,6 @@ class TristarUserSimulator implements Runnable {
 
 @Slf4j
 class CustomStompSessionHandlerAdapter extends StompSessionHandlerAdapter {
-
-
 
 
     @Override

@@ -17,7 +17,8 @@ springBoot {
 }
 
 dependencies {
-    implementation 'org.apache.groovy:groovy:4.0.14'
+    implementation("org.apache.groovy:groovy:4.0.14")
+    // Source: https://mvnrepository.com/artifact/org.codehaus.groovy/groovy
     implementation 'com.neovisionaries:nv-websocket-client:2.14'
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
     implementation group: 'org.webjars', name: 'stomp-websocket', version: '2.3.4'

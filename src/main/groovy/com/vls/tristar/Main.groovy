@@ -6,11 +6,12 @@ import java.time.Instant
 static void main(String[] args) {
     println "Starting test!"
 
-    int usersNumber = Integer.parseInt(System.getenv("USERS_NUMBER") ?: "799")
-    int statUsersNumber = 50
-    int addUsersDelay = 10
-    int addUsersNumber = 50
-    int testTotalTime = 30
+    int usersNumber = Integer.parseInt(System.getenv("USERS_NUMBER") ?: "200")
+    int statUsersNumber = 3
+    int addUsersDelay = 0
+    int addUsersNumber = 2
+    int testTotalTime = 10
+    boolean testRiskManagement = false
 
     List<Thread> threads = []
 
@@ -62,11 +63,15 @@ static void main(String[] args) {
 
 def addUsers(int number) {
     List<TristarUserSimulator> simulators = []
-    def userNameTemplate = "tr-load-test-user-"
+    def userNameTemplate = "tr-di-load-test-user-1-"
     for (int i = 0; i < number; i++) {
         def userSimualtor = new TristarUserSimulator(name: userNameTemplate + Counter.getAndIncrement())
-        if (userSimualtor.init()) {
-            simulators << userSimualtor
+        try {
+            if (userSimualtor.init()) {
+                simulators << userSimualtor
+            }
+        } catch (Exception e) {
+            println "Canno create user in simulator"
         }
     }
     return simulators
