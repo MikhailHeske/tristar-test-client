@@ -2,59 +2,28 @@ package com.vls.tristar
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
-import com.vls.tristar.model.Bet
-import com.vls.tristar.model.BetsStatetsDTO
-import com.vls.tristar.model.Market
-import com.vls.tristar.model.PlaceBet
-import com.vls.tristar.model.Round
-import com.vls.tristar.model.Winning
+import com.vls.tristar.model.*
 import com.vls.tristar.service.JWTService
-import groovy.util.logging.Slf4j
 import jakarta.websocket.ContainerProvider
 import jakarta.websocket.WebSocketContainer
 import lombok.extern.slf4j.Slf4j
-import org.apache.commons.logging.LogAdapter
-import org.apache.commons.logging.LogFactory
-import org.bouncycastle.jcajce.provider.asymmetric.RSA
-import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.springframework.lang.Nullable
 import org.springframework.messaging.converter.MappingJackson2MessageConverter
-import org.springframework.messaging.simp.stomp.StompCommand
-import org.springframework.messaging.simp.stomp.StompFrameHandler
-import org.springframework.messaging.simp.stomp.StompHeaders
-import org.springframework.messaging.simp.stomp.StompSession
-import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter
+import org.springframework.messaging.simp.stomp.*
 import org.springframework.web.socket.WebSocketHttpHeaders
-import org.springframework.web.socket.WebSocketMessage
-import org.springframework.web.socket.WebSocketSession
 import org.springframework.web.socket.client.WebSocketClient
 import org.springframework.web.socket.client.standard.StandardWebSocketClient
-import org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator
 import org.springframework.web.socket.messaging.WebSocketStompClient
 
 import java.lang.reflect.Type
-import java.math.MathContext
 import java.math.RoundingMode
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.nio.charset.Charset
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
-import java.security.KeyFactory
-import java.security.NoSuchAlgorithmException
-import java.security.PrivateKey
-import java.security.PublicKey
-import java.security.Security
-import java.security.Signature
-import java.security.spec.PKCS8EncodedKeySpec
 import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.time.temporal.TemporalUnit
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
-import java.util.logging.Logger
 
 @Slf4j
 class TristarUserSimulator implements Runnable {
@@ -64,7 +33,7 @@ class TristarUserSimulator implements Runnable {
 
     private String name
     private String userId
-    private String gameId = List.of("106", "3", "103", "104", "105", "107", "108")[new Random().nextInt(5)]
+    private String gameId = List.of("201", "202", "204", "205", "206", "207")[new Random().nextInt(5)]// List.of("106", "3", "103", "104", "105", "107", "108")[new Random().nextInt(5)]
     private HttpClient httpClient = HttpClient.newHttpClient();
 
     private WebSocketClient client
@@ -80,7 +49,11 @@ class TristarUserSimulator implements Runnable {
     boolean init() {
         createUserInSimulator()
         balanceBefore = fetchBalanceDi()
-        return connect()
+        boolean connected = connect()
+        if (connected) {
+            UserRiskTracker.instance.register(userId?.toString(), name)
+        }
+        return connected
     }
 
     void createUserInSimulator() {
@@ -370,6 +343,11 @@ class TristarUserSimulator implements Runnable {
         void handleFrame(StompHeaders headers, @Nullable Object payload) {
             // println("Received market update: $payload")
             Market newMarket = (Market) payload
+            try {
+                UserRiskTracker.instance.onMarket(newMarket)
+            } catch (Exception riskError) {
+                println "Risk tracker market update failed: ${riskError.message}"
+            }
 
             int indexOfMarket = markets.findIndexOf { it.id == newMarket.id }
             if (indexOfMarket > -1) {
@@ -428,6 +406,11 @@ class TristarUserSimulator implements Runnable {
                     if (!isReplaced) {
                         currentBets << newBet
                     }
+                    try {
+                        UserRiskTracker.instance.onBet(userId?.toString(), newBet)
+                    } catch (Exception riskError) {
+                        println "Risk tracker bet update failed: ${riskError.message}"
+                    }
                 }
             } catch (Exception e) {
                 println("Error in BetStateHandler: ${e.getMessage()}")
@@ -447,6 +430,11 @@ class TristarUserSimulator implements Runnable {
             println("Received winning update: $payload")
 
             Winning winning = (Winning) payload
+            try {
+                UserRiskTracker.instance.onWinning(userId?.toString(), winning)
+            } catch (Exception riskError) {
+                println "Risk tracker winning update failed: ${riskError.message}"
+            }
 
             BigDecimal balanceAfter = fetchBalanceDi()
             UserRoundResultData data = new UserRoundResultData(

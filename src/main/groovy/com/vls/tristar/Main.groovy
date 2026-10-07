@@ -11,7 +11,8 @@ static void main(String[] args) {
     int addUsersDelay = 0
     int addUsersNumber = 2
     int testTotalTime = 10
-    boolean testRiskManagement = false
+    boolean testRiskManagement = Boolean.parseBoolean(System.getenv("TEST_RISK_MANAGEMENT") ?: "true")
+    UserRiskTracker.configure(testRiskManagement)
 
     List<Thread> threads = []
 
@@ -57,6 +58,7 @@ static void main(String[] args) {
     }
     threads.each { it.join() }
 
+    UserRiskTracker.instance.awaitAndVerify()
     Reports.getInstance().printReport()
 }
 

@@ -22,4 +22,21 @@ class Constants {
 
     static final String balanceDIEndpoint = simulatorHost + '/supplier/generic/v1/users/{user}/balance'
     static final String operatorGameUrlDIEndpoint = operatorHost + '/api/v1/games/url'
+
+    static String betDbUrl() {
+        String configured = System.getenv("BET_DB_URL")
+        if (configured) {
+            return configured
+        }
+        String host = System.getenv("POSTGRES_HOST") ?: "postgres.preprod.tristaar.staging:5435"
+        return "jdbc:postgresql://${host}/bet"
+    }
+
+    static String betDbUser() {
+        return System.getenv("BET_DB_USER") ?: System.getenv("POSTGRES_USER") ?: "hzhzhz"
+    }
+
+    static String betDbPassword() {
+        return System.getenv("BET_DB_PASSWORD") ?: System.getenv("POSTGRES_PASSWORD") ?: "hzhzhz"
+    }
 }

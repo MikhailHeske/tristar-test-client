@@ -24,6 +24,7 @@ dependencies {
     implementation group: 'org.webjars', name: 'stomp-websocket', version: '2.3.4'
     implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.18.2'
     implementation 'com.nimbusds:nimbus-jose-jwt:3.6'
+    implementation 'org.postgresql:postgresql'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
